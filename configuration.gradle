@@ -1,0 +1,48 @@
+import com.fasterxml.jackson.dataformat.yaml.snakeyaml.Yaml
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.3.2'
+    }
+}
+
+project.ext {
+    configuraionFile = 'authorizer-service.yml'
+}
+
+task expandirConfig(type: Copy) {
+    def dataBaseHost = getEnviromentVariable("$System.env.IP_BASE_DATOS_PREPRO", "localhost")
+    def urlCelReception = getEnviromentVariable("URL_CEL","https://cel.sri.gob.ec/comprobantes-electronicos-ws/RecepcionComprobantes?wsdl")
+    def urlCelCerReception = getEnviromentVariable("URL_CELCER","https://celcer.sri.gob.ec/comprobantes-electronicos-ws/RecepcionComprobantes?wsdl")
+    def urlCelAuthorization = getEnviromentVariable("URL_CEL","https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantes?wsdl")
+    def urlCelCerAuthorization = getEnviromentVariable("URL_CELCER","https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantes?wsdl")
+
+    from('.')
+    include('**/*.yml.template')
+    rename { String fileName -> fileName.replace('.template', '') }
+    expand(host: dataBaseHost,urlCelReception: urlCelReception ,urlCelCerReception: urlCelCerReception, urlCelAuthorization: urlCelAuthorization, urlCelCerAuthorization: urlCelCerAuthorization)
+    into('.')
+}
+
+task configureService(dependsOn: expandirConfig) {
+    doLast {
+        def yamlConfig = new Yaml().load(new File(configuraionFile).newReader())
+        def dbConfig = yamlConfig.database
+        project.ext['flyway.user'] = dbConfig.user
+        project.ext['flyway.password'] = dbConfig.password
+        project.ext['flyway.url'] = dbConfig.url
+        project.ext['flyway.schemas'] = dbConfig.properties.'hibernate.default_schema'
+    }
+}
+
+def getEnviromentVariable(key, valorPorDefecto) {
+    if (System.getenv(key) != null) {
+        return System.getenv(key)
+    } else if (this.properties[key] != null) {
+        return this.properties[key]
+    }
+    return valorPorDefecto
+}
